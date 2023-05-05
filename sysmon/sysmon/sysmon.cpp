@@ -7,6 +7,8 @@
 
 VOID SysmonUnload(IN PDRIVER_OBJECT DriverObject);
 VOID OnProcessNotify(PEPROCESS Process, HANDLE ProcessId, PPS_CREATE_NOTIFY_INFO CreateInfo);
+VOID OnThreadNotify(_In_ HANDLE ProcessId, _In_ HANDLE ThreadId, _In_ BOOLEAN Create);
+VOID OnImageNotify(_In_opt_ PUNICODE_STRING FullImageName, _In_ HANDLE ProcessId, _In_ PIMAGE_INFO ImageInfo);
 NTSTATUS CompleteRequestAux(PIRP Irp, NTSTATUS status, ULONG_PTR info);
 NTSTATUS SysmonCreateClose(IN PDEVICE_OBJECT DeviceObject, IN PIRP Irp);
 NTSTATUS SysmonRead(IN PDEVICE_OBJECT DeviceObject, IN PIRP Irp);
@@ -18,6 +20,7 @@ NTSTATUS DriverEntry(IN PDRIVER_OBJECT DriverObject, IN PUNICODE_STRING Registry
 	UNREFERENCED_PARAMETER(RegistryPath);
 	
 	NTSTATUS status = STATUS_SUCCESS;
+	bool hasSymLink = false, hasProcessMonitor = false, hasThreadMonitor = false, hasImageMonitor = false;
 
 	g_Globals.Init();
 	DriverObject->DriverUnload = SysmonUnload;
@@ -33,25 +36,47 @@ NTSTATUS DriverEntry(IN PDRIVER_OBJECT DriverObject, IN PUNICODE_STRING Registry
 		DbgPrint("IoCreateDevice failed with status 0x%08X\n", status);
 		goto exit;
 	}
-
 	DeviceObject->Flags |= DO_DIRECT_IO;
 
 	status = IoCreateSymbolicLink(&SymLinkName, &DeviceName);
 	if (!NT_SUCCESS(status)) {
 		DbgPrint("IoCreateSymbolicLink failed with status 0x%08X\n", status);
-		IoDeleteDevice(DeviceObject);
 		goto exit;
 	}
+	hasSymLink = true;
 
 	status = PsSetCreateProcessNotifyRoutineEx(OnProcessNotify, FALSE);
 	if (!NT_SUCCESS(status)) {
 		DbgPrint("PsSetCreateProcessNotifyRoutineEx failed with status 0x%08X\n", status);
-		IoDeleteSymbolicLink(&SymLinkName);
-		IoDeleteDevice(DeviceObject);
 		goto exit;
 	}
+	hasProcessMonitor = true;
+
+	status = PsSetCreateThreadNotifyRoutine(OnThreadNotify);
+	if (!NT_SUCCESS(status)) {
+		DbgPrint("PsSetCreateNotifyRoutine failed with status 0x%08X\n", status);
+		goto exit;
+	}
+	hasThreadMonitor = true;
+
+	status = PsSetLoadImageNotifyRoutine(OnImageNotify);
+	if (!NT_SUCCESS(status)) {
+		DbgPrint("PsSetLoadImageNotifyRoutine failed with status 0x%08X\n", status);
+		goto exit;
+	}
+	hasImageMonitor = true;
 
 exit:
+	if (!NT_SUCCESS(status)) {
+		if (hasThreadMonitor)
+			PsRemoveCreateThreadNotifyRoutine(OnThreadNotify);
+		if (hasProcessMonitor)
+			PsSetCreateProcessNotifyRoutineEx(OnProcessNotify, TRUE);
+		if (hasSymLink)
+			IoDeleteSymbolicLink(&SymLinkName);
+		if (DeviceObject)
+			IoDeleteDevice(DeviceObject);
+	}
 	return status;
 }
 
@@ -102,6 +127,58 @@ VOID OnProcessNotify(PEPROCESS Process, HANDLE ProcessId, PPS_CREATE_NOTIFY_INFO
 
 		g_Globals.PushItem(&info->Entry);
 	}
+}
+
+VOID OnThreadNotify(_In_ HANDLE ProcessId, _In_ HANDLE ThreadId, _In_ BOOLEAN Create) {
+	auto size = sizeof(FullItem<ThreadCreateExitInfo>);
+	auto info = (FullItem<ThreadCreateExitInfo>*)ExAllocatePool2(POOL_FLAG_PAGED, size, DRIVER_TAG);
+	if (info == nullptr) {
+		DbgPrint("ThreadCreateExit Failed allocation\n");
+		return;
+	}
+	auto& item = info->Data;
+	KeQuerySystemTimePrecise(&item.Time);
+	item.Type = Create ? ItemType::ThreadCreate : ItemType::ThreadExit;
+	item.ProcessId = HandleToULong(ProcessId);
+	item.ThreadId = HandleToULong(ThreadId);
+	item.Size = sizeof(item);
+
+	g_Globals.PushItem(&info->Entry);
+}
+
+VOID OnImageNotify(_In_opt_ PUNICODE_STRING FullImageName, _In_ HANDLE ProcessId, _In_ PIMAGE_INFO ImageInfo) {
+	if (ProcessId == 0)
+		return;
+	auto size = sizeof(FullItem<ImageLoadInfo>);
+	auto info = (FullItem<ImageLoadInfo>*)ExAllocatePool2(POOL_FLAG_PAGED, size, DRIVER_TAG);
+	if (info == nullptr) {
+		DbgPrint("ImageLoad Failed allocation\n");
+		return;
+	}
+	auto& item = info->Data;
+	KeQuerySystemTimePrecise(&item.Time);
+	item.Type = ItemType::ImageLoad;
+	item.ProcessId = HandleToULong(ProcessId);
+	item.ImageBase = (ULONG64)ImageInfo->ImageBase;
+	item.ImageSize = (ULONG)ImageInfo->ImageSize;
+	item.Size = sizeof(item);
+	item.ImageFileName[0] = '7';
+
+	if (ImageInfo->ExtendedInfoPresent) {
+		auto exinfo = CONTAINING_RECORD(ImageInfo, IMAGE_INFO_EX, ImageInfo);
+		PFLT_FILE_NAME_INFORMATION nameInfo = nullptr;
+		auto status = FltGetFileNameInformationUnsafe(exinfo->FileObject, nullptr, FLT_FILE_NAME_NORMALIZED | FLT_FILE_NAME_QUERY_DEFAULT, &nameInfo);
+		if (NT_SUCCESS(status)) {
+			wcscpy_s(item.ImageFileName, nameInfo->Name.Buffer);
+			FltReleaseFileNameInformation(nameInfo);
+		}
+	}
+
+	if (item.ImageFileName[0] == '7' && FullImageName) {
+		wcscpy_s(item.ImageFileName, FullImageName->Buffer);
+	}
+
+	g_Globals.PushItem(&info->Entry);
 }
 
 NTSTATUS CompleteRequestAux(PIRP Irp, NTSTATUS status, ULONG_PTR info) {
@@ -159,6 +236,8 @@ NTSTATUS SysmonRead(IN PDEVICE_OBJECT DeviceObject, IN PIRP Irp) {
 
 VOID SysmonUnload(IN PDRIVER_OBJECT DriverObject) {
 	PsSetCreateProcessNotifyRoutineEx(OnProcessNotify, TRUE);
+	PsRemoveCreateThreadNotifyRoutine(OnThreadNotify);
+	PsRemoveLoadImageNotifyRoutine(OnImageNotify);
 
 	LIST_ENTRY* entry;
 	while ((entry = g_Globals.RemoveItem()) != nullptr) {

@@ -36,6 +36,25 @@ void DisplayInfo(BYTE* buffer, DWORD size) {
 			printf("Process %d Created: %ws\n", info->ProcessId, commandLine.c_str());
 			break;
 		}
+		case ItemType::ThreadCreate: {
+			DisplayTime(header->Time);
+			auto info = (ThreadCreateExitInfo*)buffer;
+			printf("Thread %d Created in process %d\n", info->ThreadId, info->ProcessId);
+			break;
+		}
+		case ItemType::ThreadExit: {
+			DisplayTime(header->Time);
+			auto info = (ThreadCreateExitInfo*)buffer;
+			printf("Thread %d Exited in process %d\n", info->ThreadId, info->ProcessId);
+			break;
+		}
+		case ItemType::ImageLoad: {
+			DisplayTime(header->Time);
+			auto info = (ImageLoadInfo*)buffer;
+			printf("Image %ws Loaded in process %d base:0x%08X\n", info->ImageFileName, info->ProcessId, info->ImageBase);
+			break;
+		}
+
 		default:
 			break;
 		}
