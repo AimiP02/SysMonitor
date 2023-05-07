@@ -1,0 +1,35 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.5.33627.172
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "ProcessProtect", "ProcessProtect\ProcessProtect.vcxproj", "{05579D90-C195-4004-96BC-4CB784C2A738}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|ARM64 = Debug|ARM64
+		Debug|x64 = Debug|x64
+		Release|ARM64 = Release|ARM64
+		Release|x64 = Release|x64
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{05579D90-C195-4004-96BC-4CB784C2A738}.Debug|ARM64.ActiveCfg = Debug|ARM64
+		{05579D90-C195-4004-96BC-4CB784C2A738}.Debug|ARM64.Build.0 = Debug|ARM64
+		{05579D90-C195-4004-96BC-4CB784C2A738}.Debug|ARM64.Deploy.0 = Debug|ARM64
+		{05579D90-C195-4004-96BC-4CB784C2A738}.Debug|x64.ActiveCfg = Debug|x64
+		{05579D90-C195-4004-96BC-4CB784C2A738}.Debug|x64.Build.0 = Debug|x64
+		{05579D90-C195-4004-96BC-4CB784C2A738}.Debug|x64.Deploy.0 = Debug|x64
+		{05579D90-C195-4004-96BC-4CB784C2A738}.Release|ARM64.ActiveCfg = Release|ARM64
+		{05579D90-C195-4004-96BC-4CB784C2A738}.Release|ARM64.Build.0 = Release|ARM64
+		{05579D90-C195-4004-96BC-4CB784C2A738}.Release|ARM64.Deploy.0 = Release|ARM64
+		{05579D90-C195-4004-96BC-4CB784C2A738}.Release|x64.ActiveCfg = Release|x64
+		{05579D90-C195-4004-96BC-4CB784C2A738}.Release|x64.Build.0 = Release|x64
+		{05579D90-C195-4004-96BC-4CB784C2A738}.Release|x64.Deploy.0 = Release|x64
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {3D75F313-D02E-4FA3-9CF2-E861D9EDC935}
+	EndGlobalSection
+EndGlobal
